@@ -1,0 +1,10 @@
+logger:
+  logFile: "app.log"
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "user"
+  password: "password"
+  dbname: "postgres"
+  sslmode: "disable"
