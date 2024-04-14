@@ -14,9 +14,9 @@ import (
 	"database/sql"
 
 	"github.com/DATA-DOG/go-sqlmock"
-
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetAllTransactions(t *testing.T) {
@@ -183,6 +183,151 @@ func TestGetTransactionByID(t *testing.T) {
 
 			assert.Equal(t, test.expectedStatusCode, w.Code)
 			assert.JSONEq(t, test.expectedResponse, w.Body.String())
+
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("there were unfulfilled expectations: %s", err)
+			}
+		})
+	}
+}
+func TestDeleteTransaction(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	router := gin.Default()
+	router.DELETE("/transaction/:id", func(c *gin.Context) {
+		c.Set("db", db)
+		DeleteTransaction(c)
+	})
+
+	tests := []struct {
+		description    string
+		transactionID  string
+		mockBehavior   func()
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			description:   "Successful Deletion",
+			transactionID: "1",
+			mockBehavior: func() {
+				mock.ExpectExec("DELETE FROM transactions WHERE").WithArgs(1).WillReturnResult(sqlmock.NewResult(0, 1))
+			},
+			expectedStatus: http.StatusOK,
+			expectedBody:   `{"message":"Transaction deleted"}`,
+		},
+		{
+			description:    "Invalid ID format",
+			transactionID:  "abc",
+			mockBehavior:   func() {},
+			expectedStatus: http.StatusBadRequest,
+			expectedBody:   `{"error":"Invalid ID format"}`,
+		},
+		{
+			description:   "DB Error on Deletion",
+			transactionID: "2",
+			mockBehavior: func() {
+				mock.ExpectExec("DELETE FROM transactions WHERE").WithArgs(2).WillReturnError(sqlmock.ErrCancelled)
+			},
+			expectedStatus: http.StatusInternalServerError,
+			expectedBody:   `{"error":"Error deleting transaction"}`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.description, func(t *testing.T) {
+			test.mockBehavior()
+
+			req, _ := http.NewRequest(http.MethodDelete, "/transaction/"+test.transactionID, nil)
+			w := httptest.NewRecorder()
+
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, test.expectedStatus, w.Code)
+			assert.Contains(t, w.Body.String(), test.expectedBody)
+
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("there were unfulfilled expectations: %s", err)
+			}
+		})
+	}
+}
+func TestUpdateTransaction(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	router := gin.Default()
+	router.PUT("/transaction/:id", func(c *gin.Context) {
+		c.Set("db", db)
+		UpdateTransaction(c)
+	})
+
+	transaction := models.Transaction{
+		UserID:          2,
+		Amount:          150.00,
+		Currency:        "EUR",
+		TransactionType: "покупка",
+		Category:        "electronics",
+		Description:     "updated transaction",
+	}
+
+	jsonValue, _ := json.Marshal(transaction)
+	tests := []struct {
+		description    string
+		transactionID  string
+		requestBody    []byte
+		setupMock      func()
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			description:   "Successful Update",
+			transactionID: "1",
+			requestBody:   jsonValue,
+			setupMock: func() {
+				mock.ExpectExec(`UPDATE transactions SET`).WithArgs(transaction.UserID, transaction.Amount, transaction.Currency, transaction.TransactionType, transaction.Category, transaction.Description, 1).WillReturnResult(sqlmock.NewResult(0, 1))
+			},
+			expectedStatus: http.StatusOK,
+			expectedBody:   `{"message":"Transaction updated successfully"}`,
+		},
+		{
+			description:    "Invalid ID Format",
+			transactionID:  "abc",
+			requestBody:    jsonValue,
+			setupMock:      func() {},
+			expectedStatus: http.StatusBadRequest,
+			expectedBody:   `{"error":"Invalid transaction ID format"}`,
+		},
+		{
+			description:   "DB Update Error",
+			transactionID: "1",
+			requestBody:   jsonValue,
+			setupMock: func() {
+				mock.ExpectExec(`UPDATE transactions SET`).WithArgs(transaction.UserID, transaction.Amount, transaction.Currency, transaction.TransactionType, transaction.Category, transaction.Description, 1).WillReturnError(sqlmock.ErrCancelled)
+			},
+			expectedStatus: http.StatusInternalServerError,
+			expectedBody:   `{"error":"Error updating transaction"}`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.description, func(t *testing.T) {
+			test.setupMock()
+
+			req, _ := http.NewRequest(http.MethodPut, "/transaction/"+test.transactionID, bytes.NewBuffer(test.requestBody))
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, test.expectedStatus, w.Code)
+			assert.Contains(t, w.Body.String(), test.expectedBody)
 
 			if err := mock.ExpectationsWereMet(); err != nil {
 				t.Errorf("there were unfulfilled expectations: %s", err)
