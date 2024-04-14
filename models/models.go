@@ -47,8 +47,7 @@ type Rate struct {
 }
 
 type CurrencyRates struct {
-	Data  map[string]float64 `json:"data"`
-	Rates map[string]float64 `json:"rates"`
+	Rates map[string]float64 `json:"conversion_rates"`
 }
 type TransactionResponse struct {
 	Transaction Transaction `json:"transaction"`
