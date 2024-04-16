@@ -314,7 +314,7 @@ func UpdateTransaction(c *gin.Context) {
 		return
 	}
 
-	query := `UPDATE transactions SET user_id = $1, amount = $2, currency = $3, transaction_type = $4, category = $5, description = $6 WHERE id = $7`
+	query := `UPDATE transactions SET user_id = $1, amount = $2, currency = $3, transaction_type = $4, category = $5, description = $6 WHERE transaction_id = $7`
 	_, err = db.Exec(query, transaction.UserID, transaction.Amount, transaction.Currency, transaction.TransactionType, transaction.Category, transaction.Description, id)
 	if err != nil {
 		log.WithFields(logrus.Fields{
